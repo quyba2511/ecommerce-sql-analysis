@@ -240,10 +240,10 @@ campaigns   | 10
 
 ## 👤 作者資訊
 
-**Pô (Nguyễn Bá Quý)**
+**Pô (阮貴波)**
 - 🌍 居住地：台北，台灣
-- 📧 Email: your.email@gmail.com
-- 💼 LinkedIn: [your-profile](https://linkedin.com/in/your-profile)
+- 📧 Email: nba204953@gmail.com
+- 💼 LinkedIn: [](https://linkedin.com/in/your-profile)
 - 🐙 GitHub: [@quyba2511](https://github.com/quyba2511)
 - 🔗 相關專案: [E-commerce ML 銷售預測系統](https://github.com/quyba2511/ecommerce-sales-predictor)
 
