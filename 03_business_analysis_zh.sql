@@ -381,3 +381,177 @@ ORDER BY month;
 -- - Q14: 客戶終身價值分層 / Customer Lifetime Value (CLV) tiering with NTILE
 -- - Q15: 行銷活動投資報酬率分析 / Campaign ROI Analysis
 -- ============================================================
+-- ============================================================
+-- Q12: 各國平均訂單價值 / Average Order Value (AOV) by Country
+-- 商業問題: 哪個國家的客戶平均訂單價值最高？應針對哪個市場推廣高價商品？
+-- Business Question: Which country has the highest AOV? Where to focus premium products?
+-- 利害關係人 Stakeholder: 行銷總監 / 業務總監 / Marketing Director / Sales Director
+-- ============================================================
+SELECT
+    c.country,
+    COUNT(*)                                   AS total_orders,
+    ROUND(AVG(o.total_amount)::numeric, 2)     AS aov,
+    ROUND(SUM(o.total_amount)::numeric, 2)     AS total_revenue
+FROM customers c
+INNER JOIN orders o ON c.customer_id = o.customer_id
+WHERE o.status = 'Completed'
+GROUP BY c.country
+ORDER BY aov DESC;
+ 
+-- 💡 商業洞察 INSIGHT:
+-- AOV 最高的國家代表高端市場——客戶傾向購買較貴的商品。
+-- Countries with highest AOV represent premium markets — customers tend to buy higher-value items.
+-- 📌 建議 RECOMMENDATION:
+-- 針對高 AOV 市場優先推廣電子產品、高端時尚等高價值商品。
+-- Focus premium product marketing (Electronics, luxury Fashion) on highest AOV markets.
+ 
+ 
+-- ============================================================
+-- Q13: 月度活躍客戶數趨勢 / Monthly Active Customers (MAC) in 2024
+-- 商業問題: 2024年每月有多少獨立客戶下單？每位客戶平均下幾筆訂單？
+-- Business Question: How many unique customers ordered each month? Avg orders per customer?
+-- 利害關係人 Stakeholder: 成長團隊 / 產品經理 / Growth Team / Product Manager
+-- ============================================================
+SELECT
+    DATE_TRUNC('month', o.order_date)::date          AS month,
+    COUNT(DISTINCT o.customer_id)                     AS active_customers,
+    COUNT(*)                                          AS total_orders,
+    ROUND(
+        (COUNT(*) * 1.0 / COUNT(DISTINCT o.customer_id))::numeric, 2
+    )                                                 AS avg_orders_per_customer
+FROM orders o
+WHERE o.status = 'Completed'
+  AND o.order_date >= '2024-01-01'
+  AND o.order_date < '2025-01-01'
+GROUP BY DATE_TRUNC('month', o.order_date)
+ORDER BY month ASC;
+ 
+-- 💡 商業洞察 INSIGHT:
+-- 月度活躍客戶數 (MAC) 是衡量業務健康度的核心指標。
+-- MAC 上升 → 客戶基礎擴大；MAC 下降 → 流失風險需關注。
+-- Monthly Active Customers (MAC) is a core business health metric.
+-- Rising MAC → expanding customer base; Falling MAC → churn risk.
+-- 📌 建議 RECOMMENDATION:
+-- 當 MAC 連續 2 個月下滑時，應立即啟動客戶挽留計劃。
+-- When MAC declines for 2+ consecutive months, activate customer retention campaigns immediately.
+ 
+ 
+-- ============================================================
+-- Q14: 客戶終身價值分層 / Customer Lifetime Value (CLV) Tiering
+-- 商業問題: 如何依消費總額將客戶分層？各層客戶特徵為何？
+-- Business Question: How to tier customers by lifetime value? What are the characteristics?
+-- 利害關係人 Stakeholder: 行銷團隊 / 客戶成功經理 / Marketing Team / Customer Success
+-- 技術重點: NTILE() Window Function — 將客戶分為 10 等分
+-- Technical: NTILE() Window Function — divides customers into 10 equal groups
+-- ============================================================
+WITH customer_clv AS (
+    SELECT
+        c.customer_id,
+        CONCAT(c.first_name, ' ', c.last_name)     AS full_name,
+        c.country,
+        COUNT(o.order_id)                           AS total_orders,
+        ROUND(SUM(o.total_amount)::numeric, 2)      AS total_spent,
+        ROUND(AVG(o.total_amount)::numeric, 2)      AS avg_order_value,
+        MIN(o.order_date)                           AS first_order,
+        MAX(o.order_date)                           AS last_order
+    FROM customers c
+    INNER JOIN orders o ON c.customer_id = o.customer_id
+    WHERE o.status = 'Completed'
+    GROUP BY c.customer_id, c.first_name, c.last_name, c.country
+)
+SELECT
+    full_name,
+    country,
+    total_orders,
+    total_spent,
+    avg_order_value,
+    first_order,
+    last_order,
+    -- 將客戶分為 10 個等分 / Divide customers into 10 equal groups (deciles)
+    NTILE(10) OVER (ORDER BY total_spent DESC) AS decile,
+    -- 依分位數貼標籤 / Label by tier
+    CASE
+        WHEN NTILE(10) OVER (ORDER BY total_spent DESC) = 1
+            THEN '🌟 VIP (前10% / Top 10%)'
+        WHEN NTILE(10) OVER (ORDER BY total_spent DESC) <= 3
+            THEN '⭐ Premium (前30% / Top 30%)'
+        WHEN NTILE(10) OVER (ORDER BY total_spent DESC) <= 7
+            THEN '✓ Regular (中間40% / Middle 40%)'
+        ELSE '📉 需培育 (後30% / Bottom 30%)'
+    END AS customer_tier
+FROM customer_clv
+ORDER BY total_spent DESC
+LIMIT 30;
+ 
+-- 💡 商業洞察 INSIGHT:
+-- 依帕累托原則，80% 的營收通常來自前 20% 的客戶 (VIP + Premium)。
+-- 各層策略：VIP → 維持忠誠度；Premium → 升級為 VIP；Regular → 提升購買頻率；
+-- Bottom → 再激活或接受流失。
+-- Per Pareto Principle, 80% of revenue typically comes from top 20% customers.
+-- Strategy per tier: VIP → retain loyalty; Premium → upsell to VIP;
+-- Regular → increase purchase frequency; Bottom → re-engage or accept churn.
+-- 📌 建議 RECOMMENDATION:
+-- 為 VIP 客戶提供專屬管理服務；為 Premium 客戶設計「升級 VIP」激勵方案。
+-- Provide dedicated account management for VIPs; design "Upgrade to VIP" incentives for Premium.
+ 
+ 
+-- ============================================================
+-- Q15: 行銷活動投資報酬率分析 / Campaign ROI Analysis
+-- 商業問題: 哪個行銷活動 ROI 最高？哪個通路最有效？預算應如何分配？
+-- Business Question: Which campaign has the best ROI? Which channel is most effective?
+-- 利害關係人 Stakeholder: 行銷總監 / 財務長 / CMO / CFO
+-- 技術重點: LEFT JOIN (保留無訂單的活動)、COALESCE (處理 NULL 值)
+-- Technical: LEFT JOIN (keep campaigns with no orders), COALESCE (handle NULL values)
+-- ============================================================
+SELECT
+    cmp.campaign_name,
+    cmp.channel,
+    cmp.start_date,
+    cmp.end_date,
+    (cmp.end_date - cmp.start_date)                     AS duration_days,
+    cmp.budget,
+    COUNT(DISTINCT o.order_id)                           AS orders_during_campaign,
+    ROUND(COALESCE(SUM(o.total_amount), 0)::numeric, 2) AS revenue_during_campaign,
+    ROUND(
+        ((COALESCE(SUM(o.total_amount), 0) - cmp.budget)
+        * 100.0 / cmp.budget)::numeric, 2
+    )                                                    AS roi_percentage,
+    CASE
+        WHEN COALESCE(SUM(o.total_amount), 0) > cmp.budget * 3
+            THEN '🚀 Excellent (ROI > 200%)'
+        WHEN COALESCE(SUM(o.total_amount), 0) > cmp.budget * 2
+            THEN '✅ Good (ROI 100-200%)'
+        WHEN COALESCE(SUM(o.total_amount), 0) > cmp.budget
+            THEN '✓ Profitable (ROI 0-100%)'
+        ELSE '❌ Loss (負 ROI / Negative ROI)'
+    END AS performance_tier
+FROM campaigns cmp
+LEFT JOIN orders o
+    ON o.order_date BETWEEN cmp.start_date AND cmp.end_date
+    AND o.status = 'Completed'
+GROUP BY
+    cmp.campaign_id, cmp.campaign_name, cmp.channel,
+    cmp.start_date, cmp.end_date, cmp.budget
+ORDER BY roi_percentage DESC;
+ 
+-- 💡 商業洞察 INSIGHT:
+-- 關鍵發現 KEY FINDINGS:
+-- • 農曆新年 (Lunar New Year) 是唯一獲利的活動 (ROI +33.8%)
+--   → Multi-channel + 21 天活動期 + $60K 合理預算
+-- • Social Media 單一通路效果不佳：中秋節 (-14%) 和雙11 (-27%) 均虧損
+-- • 黑色星期五預算最高 ($100K) 但 ROI 最差 (-71%) — 嚴重資源錯配
+-- • Lunar New Year: only profitable campaign (ROI +33.8%)
+--   → Multi-channel + 21-day duration + reasonable $60K budget
+-- • Social Media alone underperforms: Mid-Autumn (-14%) and 11.11 (-27%) both lost money
+-- • Black Friday: highest budget ($100K) but worst ROI (-71%) — severe resource misallocation
+--
+-- 📌 建議 RECOMMENDATION:
+-- 1. 以農曆新年的成功模式為範本：Multi-channel、21 天以上、預算 $50-70K
+-- 2. 停止 Social Media 單一通路投放；改為 Multi-channel 組合策略
+-- 3. 重新規劃黑色星期五策略：縮減預算、延長活動期、改善受眾定向
+-- 4. 考慮更精準的活動歸因分析 (UTM tracking) 以提高 ROI 計算準確度
+-- 1. Model future campaigns after Lunar New Year: Multi-channel, 21+ days, $50-70K budget
+-- 2. Stop single Social Media channel campaigns; adopt Multi-channel strategy
+-- 3. Rethink Black Friday: reduce budget, extend duration, improve audience targeting
+-- 4. Implement proper campaign attribution (UTM tracking) for more accurate ROI measurement
+ 
